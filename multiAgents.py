@@ -75,8 +75,31 @@ class ReflexAgent(Agent):
         newScaredTimes = [ghostState.scaredTimer for ghostState in newGhostStates]
 
         "*** YOUR CODE HERE ***"
-        return successorGameState.getScore()
+        def calculate_min_food_distance(newPos, newFoodList):
+            min_food_distance = float('inf')
+            for food in newFoodList:
+                distance = manhattanDistance(newPos, food)
+                min_food_distance = min(min_food_distance, distance)
+            return min_food_distance
 
+        def calculate_ghost_metrics(newPos, ghostPositions):
+            distances_to_ghosts = float('inf')
+            proximity_to_ghosts = 0
+            for ghost_pos in ghostPositions:
+                distance = manhattanDistance(newPos, ghost_pos)
+                distances_to_ghosts += distance
+                if distance <= 1:
+                    proximity_to_ghosts += 1
+            return distances_to_ghosts, proximity_to_ghosts
+        newFoodList = newFood.asList()
+        # Calculate distance to the nearest food pellet
+        min_food_distance = calculate_min_food_distance(newPos, newFoodList)
+        # Calculate distances from Pacman to the ghosts and their proximity
+        distances_to_ghosts, proximity_to_ghosts = calculate_ghost_metrics(newPos, successorGameState.getGhostPositions())
+        # Combine the calculated metrics to create the evaluation function
+        evaluation = successorGameState.getScore() + (1 / min_food_distance) - (1 / float(distances_to_ghosts)) - proximity_to_ghosts
+        return evaluation
+    
 def scoreEvaluationFunction(currentGameState: GameState):
     """
     This default evaluation function just returns the score of the state.
@@ -136,7 +159,38 @@ class MinimaxAgent(MultiAgentSearchAgent):
         Returns whether or not the game state is a losing state
         """
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        def max_(state, depth):            
+            if depth==self.depth or state.isWin() or state.isLose():                
+                return self.evaluationFunction(state)            
+            value = float("-inf")            
+            legalMoves = state.getLegalActions()            
+            for action in legalMoves:                
+                value = max(value, min_(state.generateSuccessor(0, action), depth, 1))            
+            return value        
+            
+        def min_(state, depth, agentIndex):            
+            if depth==self.depth or state.isWin() or state.isLose():                
+                return self.evaluationFunction(state)            
+            value = float("inf")            
+            legalMoves = state.getLegalActions(agentIndex)            
+            if agentIndex==state.getNumAgents()-1:                
+                for action in legalMoves:                    
+                    value = min(value, max_(state.generateSuccessor(agentIndex, action), depth+1))
+            else:                
+                for action in legalMoves:                    
+                    value = min(value, min_(state.generateSuccessor(agentIndex, action), depth, agentIndex+1))            
+            return value        
+
+        legalMoves = gameState.getLegalActions()        
+        move = Directions.STOP        
+        value = float("-inf")        
+        for action in legalMoves:            
+            temp = min_(gameState.generateSuccessor(0, action), 0, 1)            
+            if temp > value:                
+                value = temp                
+                move = action        
+        return move
+        # util.raiseNotDefined()
 
 class AlphaBetaAgent(MultiAgentSearchAgent):
     """
@@ -147,14 +201,65 @@ class AlphaBetaAgent(MultiAgentSearchAgent):
         """
         Returns the minimax action using self.depth and self.evaluationFunction
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        def max_(state, depth, alpha, beta):
+            # Base case: if the maximum depth is reached or the game is over, return the evaluation score
+            if depth == self.depth or state.isWin() or state.isLose():
+                return self.evaluationFunction(state)
+
+            value = float("-inf")
+            legalMoves = state.getLegalActions()
+
+            for action in legalMoves:
+                value = max(value, min_(state.generateSuccessor(0, action), depth, 1, alpha, beta))
+                if value > beta:
+                    return value
+                alpha = max(alpha, value)
+
+            return value
+
+        def min_(state, depth, agentIndex, alpha, beta):
+            # Base case: if the maximum depth is reached or the game is over, return the evaluation score
+            if depth == self.depth or state.isWin() or state.isLose():
+                return self.evaluationFunction(state)
+
+            value = float("inf")
+            legalMoves = state.getLegalActions(agentIndex)
+
+            if agentIndex == state.getNumAgents() - 1:
+                for action in legalMoves:
+                    value = min(value, max_(state.generateSuccessor(agentIndex, action), depth+1, alpha, beta))
+                    if value < alpha:
+                        return value
+                    beta = min(beta, value)
+            else:
+                for action in legalMoves:
+                    value = min(value, min_(state.generateSuccessor(agentIndex, action), depth, agentIndex+1, alpha, beta))
+                    if value < alpha:
+                        return value
+                    beta = min(beta, value)
+
+            return value
+
+        legalMoves = gameState.getLegalActions()
+        move = Directions.STOP
+        value = float("-inf")
+        alpha = float("-inf")  # Initialize alpha to negative infinity
+        beta = float("inf")    # Initialize beta to positive infinity
+
+        for action in legalMoves:
+            temp = min_(gameState.generateSuccessor(0, action), 0, 1, alpha, beta)
+            if temp > value:
+                value = temp
+                move = action
+            alpha = max(alpha, value)
+
+        return move
+        # util.raiseNotDefined()
 
 class ExpectimaxAgent(MultiAgentSearchAgent):
     """
-      Your expectimax agent (question 4)
+        Your expectimax agent (question 4)
     """
-
     def getAction(self, gameState: GameState):
         """
         Returns the expectimax action using self.depth and self.evaluationFunction
@@ -163,7 +268,37 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
         legal moves.
         """
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        def max_(state, depth):
+            if depth==self.depth or state.isWin() or state.isLose():                
+                return self.evaluationFunction(state)            
+            value = float("-inf")            
+            legalMoves = state.getLegalActions()            
+            for action in legalMoves:                
+                value = max(value, expect_(state.generateSuccessor(0, action), depth, 1))
+            return value        
+        def expect_(state, depth, agentIndex):
+            if depth==self.depth or state.isWin() or state.isLose():                
+                return self.evaluationFunction(state)            
+            value = 0            
+            legalMoves = state.getLegalActions(agentIndex)            
+            if agentIndex==state.getNumAgents()-1:                
+                for action in legalMoves:                    
+                    value +=  max_(state.generateSuccessor(agentIndex, action), depth+1)
+            else:                
+                for action in legalMoves:                    
+                    value += expect_(state.generateSuccessor(agentIndex, action), depth, agentIndex+1)
+            return value/len(legalMoves)        
+
+        legalMoves = gameState.getLegalActions()        
+        move = Directions.STOP        
+        value = float("-inf")        
+        for action in legalMoves:            
+            temp = expect_(gameState.generateSuccessor(0, action), 0, 1)
+            if temp > value:                
+                value = temp                
+                move = action        
+        return move
+        # util.raiseNotDefined()
 
 def betterEvaluationFunction(currentGameState: GameState):
     """
@@ -173,7 +308,36 @@ def betterEvaluationFunction(currentGameState: GameState):
     DESCRIPTION: <write something here so we know what you did>
     """
     "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    currentPos = currentGameState.getPacmanPosition()
+    currentFood = currentGameState.getFood()
+    capsulePos = currentGameState.getCapsules()    
+    layout = currentGameState.getWalls()
+    maxlength = layout.height - 2 + layout.width - 2    
+    fooddistance = []
+    capsuledistance = []
+    for food in currentFood.asList():        
+        fooddistance.append(manhattanDistance(currentPos, food))
+    for capsule in capsulePos:        
+        capsuledistance.append(manhattanDistance(currentPos, capsule))
+    score = 0    
+    x = currentPos[0]    
+    y = currentPos[1]    
+    for ghostState in currentGameState.getGhostStates():        
+        gd = manhattanDistance(currentPos, ghostState.configuration.getPosition())        
+        if gd < 2:            
+            if ghostState.scaredTimer != 0:                
+                score += 1000.0/(gd+1)            
+            else :                
+                score -= 1000.0/(gd+1)
+    if min(capsuledistance+[float(100)])<5:        
+        score += 500.0/(min(capsuledistance))    
+    for capsule in capsulePos:        
+        if (capsule[0]==x)&(capsule[1]==y):            
+            score += 600.0    
+    minfooddistance = min(fooddistance+[float(100)])    
+    return score + 1.0/minfooddistance - len(fooddistance)*10.0
+    
+    # util.raiseNotDefined()
 
 # Abbreviation
 better = betterEvaluationFunction
